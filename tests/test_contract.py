@@ -12,16 +12,6 @@ part of the contract it guards, so one part runs on its own:
     uv run pytest -k tools        # no writing tool is wired (session 12)
     uv run pytest -k memory       # what a session remembers (session 11)
     uv run pytest -k regression   # the test for rank 1 of docs/ISSUES.md (session 14)
-
-Three tests are marked `xfail(strict=True)`: the starter agent does not do that
-part of the contract yet, and the marker says which session teaches it. When
-your agent starts doing it, the test passes, and `strict=True` turns that pass
-into a failure that says "XPASS". That is your cue: delete the marker, and the
-test becomes a pass you earned. `raises=AssertionError` means the xfail only
-counts when the CONTRACT fails, never a typo or a crash in the test itself.
-
-Two more are `skip` placeholders, for work that does not exist until a later
-session: replace the body with the real test when you get there.
 """
 
 from __future__ import annotations
@@ -29,7 +19,6 @@ from __future__ import annotations
 import json
 import threading
 
-import pytest
 from bootcamp_agent.documents import Document
 from bootcamp_agent.llm import FakeLLM
 from bootcamp_agent.tools import Tool
@@ -244,9 +233,8 @@ def test_timeout_on_a_hanging_provider_is_flagged_within_a_second() -> None:
 # ------------------------------------------------ the tools it can reach (session 12)
 
 #: Every tool your agent may reach, classified as READING: it returns text and
-#: changes nothing. Session 12 has you classify each tool as reading or writing.
-#: A writer (anything that writes, spends, sends or deletes) never goes on this
-#: list, and never gets wired to the capstone.
+#: changes nothing. A writer (anything that writes, spends, sends or deletes)
+#: never goes on this list, and never gets wired to the capstone.
 READING_TOOLS = {"search_documents", "get_document_metadata", "summarize_document"}
 
 
@@ -262,20 +250,54 @@ def test_tools_no_writing_tool_is_wired() -> None:
     assert all(isinstance(tool, Tool) for tool in tools.values())
 
 
-# ------------------------------------------------ later sessions: placeholders
+# ------------------------------------------------ what a session remembers (session 11)
 
 
-@pytest.mark.skip(
-    reason="session 11: write this when your agent remembers. Prove the cap, the reset, "
-    "and that one user's memory never answers another's."
-)
-def test_memory_is_capped_reset_and_kept_per_user() -> None:
-    raise NotImplementedError
+def _fields(answer) -> tuple:
+    return (answer.answer, answer.citations, answer.confidence, answer.needs_human_review)
 
 
-@pytest.mark.skip(
-    reason="session 14: the regression test for rank 1 of docs/ISSUES.md. Write it red "
-    "against the bug, fix the bug, watch it go green."
-)
-def test_regression_rank_1_of_the_issue_list() -> None:
-    raise NotImplementedError
+def test_memory_nothing_is_kept_between_questions() -> None:
+    reply = _reply("Chunking splits documents into passages.", ["rag-basics"])
+    used = YourAgent(client=FakeLLM(default=reply))
+
+    first = used(SUPPORTED)
+    used(UNSUPPORTED)  # a refusal in between must not change the next answer
+    again = used(SUPPORTED)
+    fresh = YourAgent(client=FakeLLM(default=reply))(SUPPORTED)
+
+    assert _fields(first) == _fields(again) == _fields(fresh)
+
+
+def test_memory_one_question_never_answers_another() -> None:
+    model = FakeLLM(default=_reply("Chunking splits documents into passages.", ["rag-basics"]))
+    agent = YourAgent(client=model)
+
+    agent(SUPPORTED)
+    refusal = agent(UNSUPPORTED)
+
+    assert _is_flagged_refusal(refusal), "an earlier answer leaked into an unsupported question"
+    assert len(model.calls) == 1, "the unsupported question must not reach the model"
+
+
+# ------------------------------------------------ rank 1 of docs/ISSUES.md (session 14)
+
+
+def test_regression_rank_1_refusal_shape_is_enforced() -> None:
+    # The model refuses in its own words but still cites and claims confidence.
+    # The agent must turn that into the one canonical refusal (the pf-15 failure).
+    model = FakeLLM(
+        default=_reply(
+            "I don't know; the documents do not contain this.",
+            ["rag-basics"],
+            confidence=0.8,
+            review=False,
+        )
+    )
+
+    answer = YourAgent(client=model)(SUPPORTED)
+
+    assert answer.answer == "I don't know based on the provided corpus."
+    assert answer.citations == ()
+    assert answer.confidence == 0.0
+    assert answer.needs_human_review
