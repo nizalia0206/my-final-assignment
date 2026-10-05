@@ -51,7 +51,7 @@ The fix for rank 1 of [ISSUES.md](ISSUES.md) (session 14), plus a second fix
 for the incomplete list answers.
 
 - model: ollama, qwen2.5:7b-instruct
-- commit: <!-- fill in: run `git rev-parse --short HEAD` after you commit -->
+- commit: c02c226
 - command: `uv run bootcamp final grade`
 - result: `score: 9/10 (90%) — pass bar 30% — PASSED`, all five critical cases passing (fa-05, fa-07, fa-08, fa-09, fa-10); fa-02 still fails `claim_support`
 - other runs on the same model: one earlier run, 9/10 (90%), same code apart from line wrapping and the same fa-02 failure
