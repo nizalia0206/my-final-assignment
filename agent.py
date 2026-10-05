@@ -35,8 +35,16 @@ INJECTION_MARKERS = (
     "ignore all previous instructions",
     "disregard previous instructions",
     "disregard the above",
+    "disregard all previous",
+    "new instructions:",
+    "you are now",
+    "forget everything",
+    "override your",
+    "act as if",
+    "do not follow",
+    "do not refuse",
+    "pretend you",
 )
-
 CANONICAL_REFUSAL = "I don't know based on the provided corpus."
 
 #: When the best-scoring document beats every other document's best chunk by
